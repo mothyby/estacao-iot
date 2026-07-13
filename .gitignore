@@ -1,0 +1,19 @@
+# Segredos -- NUNCA versionar
+.env
+config.h
+
+# Banco de dados local (contém dados da sua casa/rede; opcional manter fora)
+*.db
+*.db-journal
+
+# Ambiente virtual Python
+venv/
+__pycache__/
+*.pyc
+
+# Arduino build artifacts
+build/
+*.hex
+
+# Sistema
+.DS_Store

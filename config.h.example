@@ -1,0 +1,11 @@
+// RENOMEIE este arquivo para "config.h" (remova o ".example") e preencha
+// com suas credenciais reais. O config.h de verdade NUNCA deve ser
+// commitado -- ele ja esta listado no .gitignore.
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define WIFI_SSID     "SEU_SSID_AQUI"
+#define WIFI_PASSWORD "SUA_SENHA_AQUI"
+
+#endif
