@@ -162,6 +162,7 @@ http://localhost:8501
 
 ---
 
+<<<<<<< HEAD
 # 📂 Estrutura do projeto
 
 ```text
@@ -256,3 +257,6 @@ Este projeto está licenciado sob a licença opensource
 Graduando em Engenharia de Controle e Automação.
 
 Projeto desenvolvido como estudo prático de IoT, Sistemas Embarcados, Automação Industrial e Engenharia de Dados.
+=======
+Nenhuma licença aplicada 
+(alteracao de licenca no README)
