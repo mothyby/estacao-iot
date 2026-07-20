@@ -1,19 +1,15 @@
-# Segredos -- NUNCA versionar
-.env
+# === C++ / ESP8266 Credentials ===
 config.h
 
-# Banco de dados local (contém dados da sua casa/rede; opcional manter fora)
-*.db
-*.db-journal
-
-# Ambiente virtual Python
+# === Python Environment & Credentials ===
+.env
 venv/
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
 
-# Arduino build artifacts
-build/
-*.hex
-
-# Sistema
-.DS_Store
+# === Operational Data & Logs ===
+*.db
+*.db-wal
+*.db-shm
+logs/
