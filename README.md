@@ -1,262 +1,213 @@
-# 🌡️ Estação Meteorológica IoT
+Aqui está o conteúdo do **`README.md`** completo e atualizado dentro de uma caixa de código para que você possa copiar e colar diretamente no seu arquivo:
 
-Sistema IoT para monitoramento ambiental desenvolvido com **Arduino Mega**, **ESP8266**, **Python** e **SQLite**, capaz de adquirir dados de sensores em tempo real, disponibilizá-los via HTTP/JSON, armazená-los localmente e apresentá-los em um dashboard interativo, com sincronização opcional para a nuvem utilizando **Adafruit IO**.
+```markdown
+# 🌡️ Estação Meteorológica & Gateway IoT de Confiabilidade V2
 
----
-
-## 📌 Principais funcionalidades
-
-- 🌡️ Aquisição de temperatura e umidade com sensor DHT11
-- 🔌 Comunicação entre Arduino Mega e ESP8266 via Serial3 (UART)
-- 🌐 Servidor HTTP embarcado no ESP8266
-- 📦 API REST simples utilizando JSON
-- 🐍 Coletor desenvolvido em Python
-- 🗄️ Persistência dos dados em SQLite
-- 📊 Dashboard interativo utilizando Streamlit + Plotly
-- ☁️ Sincronização opcional com Adafruit IO
-- ✅ Validação automática de leituras inválidas
-- 🔄 Arquitetura desacoplada entre hardware e software
+Sistema IoT de nível industrial para monitoramento ambiental e análise de confiabilidade de dados operacionais. Desenvolvido com **Arduino Mega**, **ESP8266**, **Python 3 (Arquitetura Modular)**, **SQLite (modo WAL)** e **Adafruit IO**, o sistema realiza aquisição em tempo real, tratamento de sanidade física, persistência otimizada, tagueamento de eventos operacionais e visualização executiva.
 
 ---
 
-# 🏗 Arquitetura
+## 📌 Principais Funcionalidades
+
+- 🌡️ **Aquisição Térmica e Higrométrica:** Leitura precisa de temperatura e umidade via sensor DHT11.
+- 🔌 **Barramento Serial Integrado:** Comunicação robusta Arduino Mega ↔ ESP8266 via `Serial3` (UART).
+- 🌐 **Edge HTTP/JSON Server:** Microservidor embarcado no ESP8266 expondo API REST padronizada.
+- ⚙️ **Gateway Modular em Python (V2):** Arquitetura desacoplada por responsabilidades (`config`, `logger`, `database`, `collector`, `adafruit`).
+- ⏱️ **Compensação Monotônica de Tempo:** Algoritmo no loop principal com `time.perf_counter()` para amostragem isoespaçada rigorosa.
+- 🗄️ **SQLite de Alta Concorrência:** Banco configurado com suporte a modo **WAL (Write-Ahead Logging)**, timeouts de travamento e índices estratégicos de query.
+- 📐 **Confiabilidade & Métricas Operacionais:** Registro de latência ($ms$), status HTTP, falhas de parse JSON e tagueamento por enums estritos (`StatusColeta`).
+- 📝 **Log Rotativo Pré-configurado:** Handlers com retenção controlada de logs (`RotatingFileHandler`) para prevenção de saturação de disco.
+- ☁️ **Sincronização em Nuvem:** Envio assíncrono/tolerante a falhas para o **Adafruit IO**.
+- 📊 **Dashboard Industrial:** Visualização interativa e KPIs de processo via Streamlit + Plotly.
+
+---
+
+## 🏗 Arquitetura do Sistema
 
 ```text
-                 DHT11
-                   │
-                   ▼
-           Arduino Mega 2560
-             (Leitura do Sensor)
-                   │
-               UART (Serial3)
-                   │
-                   ▼
-              ESP8266 Wi-Fi
-         HTTP Server + JSON API
-             │             │
-             │             └──────────────► Adafruit IO
-             │
-             ▼
-      Python Data Collector
-             │
-             ▼
-           SQLite
-             │
-             ▼
-    Streamlit + Plotly Dashboard
+                     DHT11 (Sensor)
+                           │
+                           ▼
+                   Arduino Mega 2560
+               (Processamento e Leitura)
+                           │
+                     UART (Serial3)
+                           │
+                           ▼
+                    ESP8266 Wi-Fi
+               (HTTP Server + JSON API)
+                    │             │
+                    │             └──────────────► Adafruit IO (Cloud)
+                    │
+                    ▼
+          Python IoT Gateway (V2)
+      ┌─────────────────────────────────┐
+      │  main.py (Orquestrador)         │
+      │  ├── coleta.config (Enums/.env) │
+      │  ├── coleta.logger (Rotativo)   │
+      │  ├── coleta.database (WAL)      │
+      │  ├── coleta.collector (Loop)    │
+      │  └── coleta.adafruit (API)      │
+      └─────────────────────────────────┘
+                    │
+                    ▼
+             SQLite (WAL + Índices)
+                    │
+                    ▼
+          Streamlit + Plotly Dashboard
+
 ```
 
 ---
 
-# 🛠 Tecnologias
+## 🛠 Stack Tecnológico
 
-## Hardware
-
-- Arduino Mega 2560
-- ESP8266 (RobotDyn integrado)
-- Sensor DHT11
-
-## Software
-
-### Firmware
-
-- Arduino IDE 2.x
-- C++
-
-### Backend
-
-- Python 3
-- Requests
-- SQLite3
-- Pandas
-
-### Visualização
-
-- Streamlit
-- Plotly
-
-### Sistema Operacional
-
-- Ubuntu Linux
-- VS Code
+* **Hardware & Firmware:** Arduino Mega 2560, ESP8266 (RobotDyn integrado), DHT11, C/C++ (Arduino IDE 2.x).
+* **Backend & Coleta (V2):** Python 3.11+, Requests, Python-Dotenv, Logging Nativo.
+* **Banco de Dados:** SQLite3 (PRAGMA WAL, Indexes em `data`, `timestamp` e `status`).
+* **Visualização & Analytics:** Streamlit, Plotly, Pandas.
+* **Ambiente Executivo:** Ubuntu Linux, VS Code, Git/GitHub.
 
 ---
 
-# 🚀 Como executar
+## 🛡️ Segurança e Gestão de Segredos (DevSecOps)
 
-## 1. Firmware
+O repositório foi construído seguindo os padrões de segurança em desenvolvimento. **Nenhum dado sensível ou credencial de rede/API é versionado.**
 
-Clone o repositório
+### Arquivos Protegidos pelo `.gitignore`:
 
-```bash
-git clone https://github.com/mothyby/estacao-iot.git
-cd estacao-iot
-```
-
-Copie o arquivo de configuração
-
-```bash
-cp config.h.example config.h
-```
-
-Configure:
-
-- SSID
-- Senha Wi-Fi
-- Credenciais da Adafruit (opcional)
-
-Grave:
-
-- `mega_dht11_serial3.ino`
-- `esp8266_servidor_dht.ino`
-
-Configure os DIP Switches para comunicação Mega ↔ ESP8266.
+* `config.h` (Credenciais Wi-Fi do ESP8266)
+* `.env` (Credenciais Adafruit IO e URLs locais)
+* `*.db`, `*.db-wal`, `*.db-shm` (Bancos SQLite)
+* `logs/` (Arquivos rotativos de log)
+* `venv/` (Ambiente virtual Python)
 
 ---
 
-## 2. Ambiente Python
-
-```bash
-python3 -m venv .venv
-
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-Configure o ambiente
-
-```bash
-cp .env.example .env
-```
-
-Edite:
-
-```
-ESP8266_URL=
-
-ADAFRUIT_USER=
-
-ADAFRUIT_KEY=
-```
-
-Execute o coletor
-
-```bash
-python salvar_dados.py
-```
-
----
-
-## 3. Dashboard
-
-```bash
-streamlit run dashboard.py
-```
-
-Abra:
-
-```
-http://localhost:8501
-```
-
----
-
-<<<<<<< HEAD
-# 📂 Estrutura do projeto
+## 📂 Estrutura do Repositório
 
 ```text
 estacao-iot/
+├── coleta/                     # Pacote Modular do Gateway Python (V2)
+│   ├── __init__.py
+│   ├── adafruit.py             # Sincronização e API Adafruit IO
+│   ├── collector.py            # Execução de ciclos e validação física
+│   ├── config.py               # Enumerações de status e variáveis de ambiente
+│   ├── database.py             # DDL, DML, inicialização WAL e conexão SQLite
+│   └── logger.py               # Handler de Logs Rotativos (Console + Arquivo)
+├── logs/                       # Logs operacionais do Gateway (Ignorado pelo Git)
+├── .env.example                # Template neutro para variáveis de ambiente
+├── .gitignore                  # Regras estritas de segurança de código/dados
+├── config.h.example            # Template neutro para Wi-Fi do C++
+├── dashboard.py                # Dashboard executivo em Streamlit + Plotly
+├── esp8266_servidor_dht.ino   # Firmware HTTP Server no ESP8266
+├── mega_dht11_serial3.ino     # Firmware de leitura e envio UART no Arduino Mega
+├── main.py                     # Entrypoint do Gateway IoT
+├── README.md                   # Documentação oficial
+└── requirements.txt            # Dependências das bibliotecas Python
 
-├── firmware/
-│   ├── mega_dht11_serial3.ino
-│   └── esp8266_servidor_dht.ino
-│
-├── python/
-│   ├── salvar_dados.py
-│   ├── dashboard.py
-│   └── requirements.txt
-│
-├── database/
-│   └── estacao_climatica.db
-│
-├── docs/
-│   ├── arquitetura.png
-│   ├── dashboard.png
-│   └── diario_engenharia.md
-│
-├── .env.example
-├── config.h.example
-└── README.md
 ```
 
 ---
 
-# 📊 Dashboard
+## 🚀 Como Executar o Projeto
 
-O sistema apresenta em tempo real:
+### 1. Firmware (C++)
 
-- Temperatura atual
-- Umidade atual
-- Última leitura
-- Histórico temporal
-- Estatísticas do período
-- Filtro de datas
-- Descarte automático de leituras inválidas
+1. Clone o repositório:
+```bash
+git clone [https://github.com/mothyby/estacao-iot.git](https://github.com/mothyby/estacao-iot.git)
+cd estacao-iot
 
----
+```
 
-# 🔍 Principais desafios resolvidos
 
-Durante o desenvolvimento foram solucionados diversos problemas de integração:
+2. Crie o arquivo de credenciais da placa a partir do modelo:
+```bash
+cp config.h.example config.h
 
-- Comunicação Serial entre Mega e ESP8266
-- Configuração dos DIP Switches RobotDyn
-- Migração da arquitetura Serial para HTTP/JSON
-- Sincronização entre firmware e coletor Python
-- Tratamento de leituras inválidas
-- Persistência em SQLite
-- Integração com Adafruit IO
-- Construção do dashboard em Streamlit
+```
+
+
+3. Abra e configure seu `SSID` e `PASSWORD` dentro do `config.h`.
+4. Compile e grave os arquivos `.ino` em suas respectivas placas (Arduino Mega e ESP8266), atentando-se para a chave dos DIP Switches RobotDyn.
 
 ---
 
-# 📈 Roadmap
+### 2. Backend / Gateway de Coleta (Python V2)
 
-## ✔ Versão 1.0
+1. Crie e ative o ambiente virtual no Ubuntu:
+```bash
+python3 -m venv venv
+source venv/bin/activate
 
-- [x] Comunicação Serial
-- [x] HTTP/JSON
-- [x] SQLite
-- [x] Dashboard
-- [x] Adafruit IO
+```
 
-## 🚧 Próximas versões
 
-- [ ] MQTT
-- [ ] Docker
-- [ ] PostgreSQL
-- [ ] FastAPI
-- [ ] Testes automatizados
-- [ ] CI/CD (GitHub Actions)
-- [ ] Alertas via Telegram
-- [ ] Deploy em Raspberry Pi
+2. Instale as dependências:
+```bash
+pip install -r requirements.txt
+
+```
+
+
+3. Configure as variáveis de ambiente:
+```bash
+cp .env.example .env
+
+```
+
+
+*Edite o `.env` preenchendo o IP atribuído ao seu ESP8266 e suas chaves do Adafruit IO.*
+4. Inicie o Gateway de Coleta:
+```bash
+python main.py
+
+```
+
+
 
 ---
 
-# 📄 Licença
+### 3. Dashboard Interativo
 
-Este projeto está licenciado sob a licença opensource
+Em outro terminal (com o `venv` ativo):
+
+```bash
+streamlit run dashboard.py
+
+```
+
+Acesse no seu navegador: `http://localhost:8501`
 
 ---
 
-# 👨‍💻 Autor
+## 📈 Roadmap do Projeto
+
+* [x] Arquitetura desacoplada Serial/UART ↔ HTTP/JSON
+* [x] Refatoração Modular Python V2
+* [x] Tolerância a falhas, Enums estritos e logs rotativos
+* [x] Otimização SQLite (Modo WAL e Índices de consulta)
+* [ ] Dashboard Interativo Streamlit
+* [ ] Módulo de cálculo de MTBF e MTTR automatizado para o Dashboard
+* [ ] Containerização da aplicação com Docker / Docker Compose
+* [ ] Migração do protocolo HTTP para Broker MQTT local (Mosquitto)
+* [ ] Alertas automatizados de desvio térmico via Telegram Bot API
+
+---
+
+## 👨‍💻 Autor
+## Atividade de programação realizada por IA 
 
 **Cleber Gonçalves de Jesus**
 
-Graduando em Engenharia de Controle e Automação.
+*Analista de Engenharia de Automação & Dados Industriais Senior*
 
-Projeto desenvolvido como estudo prático de IoT, Sistemas Embarcados, Automação Industrial e Engenharia de Dados.
-=======
-Nenhuma licença aplicada 
-(alteracao de licenca no README)
+*Graduando em Engenharia de Controle e Automação*
+
+*Graduando em Gestão da Produção Industrial*
+
+
+```
+
+```
