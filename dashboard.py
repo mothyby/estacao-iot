@@ -47,7 +47,8 @@ def carregar_dados_coleta():
     if not df.empty:
         # 1. Normalização rigorosa da coluna de Data/Hora
         coluna_tempo_encontrada = None
-        for col in ["timestamp_iso", "timestamp", "data", "created_at"]:
+        # Inserção de "timestamp_execucao" para capturar os dados da tabela coleta_evento
+        for col in ["timestamp_execucao", "timestamp_iso", "timestamp", "data", "created_at"]:
             if col in df.columns:
                 coluna_tempo_encontrada = col
                 break
