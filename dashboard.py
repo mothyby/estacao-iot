@@ -1,143 +1,254 @@
 import os
-import streamlit as st
-import pandas as pd
 import sqlite3
+import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
+import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
-st.set_page_config(page_title="Estação Climática IoT", page_icon="🌡️", layout="wide")
+# --- Configuração da Página ---
+st.set_page_config(
+    page_title="Yby Tech — Gestão & Confiabilidade IoT V2",
+    page_icon="🌱",
+    layout="wide"
+)
 
 DB_PATH = os.environ.get("DB_PATH", "estacao_climatica.db")
 
+# Procura o arquivo de logo em assets/ ou na raiz
+LOGO_PATH = None
+for caminho in [os.path.join("assets", "logo.jpg"), os.path.join("assets", "logo.png"), "logo.jpg", "logo.png"]:
+    if os.path.exists(caminho):
+        LOGO_PATH = caminho
+        break
 
-@st.cache_data(ttl=5)
-def carregar_dados():
+
+@st.cache_data(ttl=3)
+def carregar_dados_coleta():
+    """Carrega e normaliza os dados da tabela 'coleta_evento' ou 'leitura'."""
     conn = sqlite3.connect(DB_PATH)
-    # Filtro de sanidade direto na query: qualquer leitura fora da faixa
-    # fisicamente plausivel do DHT11 (0-100% e -40 a 80C) e lixo de boot/
-    # reset do ESP8266/Mega, nunca uma leitura real do sensor.
-    df = pd.read_sql_query(
-        """SELECT * FROM leitura
-           WHERE humidade BETWEEN 0 AND 100
-             AND temperatura BETWEEN -40 AND 80
-           ORDER BY id""",
-        conn,
-    )
+    try:
+        # Tenta a tabela V2 primeiro
+        df = pd.read_sql_query("SELECT * FROM coleta_evento ORDER BY id ASC", conn)
+    except Exception:
+        df = pd.DataFrame()
+
+    # Fallback para tabela antiga caso a V2 esteja vazia
+    if df.empty:
+        try:
+            df = pd.read_sql_query("SELECT * FROM leitura ORDER BY id ASC", conn)
+        except Exception:
+            df = pd.DataFrame()
+
     conn.close()
-    df["data"] = pd.to_datetime(df["data"])
+
+    if not df.empty:
+        # 1. Normalização rigorosa da coluna de Data/Hora
+        coluna_tempo_encontrada = None
+        for col in ["timestamp_iso", "timestamp", "data", "created_at"]:
+            if col in df.columns:
+                coluna_tempo_encontrada = col
+                break
+        
+        if coluna_tempo_encontrada:
+            df.rename(columns={coluna_tempo_encontrada: "timestamp"}, inplace=True)
+            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        else:
+            # Fallback de emergência se nenhuma coluna temporal for achada
+            df["timestamp"] = pd.Series(pd.date_range(start="2026-01-01", periods=len(df), freq="min"))
+
+        # 2. Normalização da coluna de Umidade
+        if "umidade" not in df.columns:
+            for col in df.columns:
+                if col.startswith("umi") or col.startswith("hum"):
+                    df.rename(columns={col: "umidade"}, inplace=True)
+                    break
+
+        # 3. Garantia de colunas V2 caso venha da tabela legada
+        if "duracao_execucao_ms" not in df.columns:
+            df["duracao_execucao_ms"] = 0.0
+        if "status" not in df.columns:
+            df["status"] = "OK"
+        if "http_code" not in df.columns:
+            df["http_code"] = 200
+        if "erro" not in df.columns:
+            df["erro"] = None
+
     return df
 
 
-st.title("🌡️ Estação Meteorológica IoT — Dashboard")
-st.caption("DHT11 → Arduino Mega → ESP8266 (Wi-Fi/HTTP) → SQLite")
+# --- Cabeçalho Executivo Yby Tech ---
+col_logo, col_titulo = st.columns([1, 5], vertical_alignment="center")
 
-if st.button("🔄 Atualizar agora"):
-    st.cache_data.clear()
+with col_logo:
+    if LOGO_PATH:
+        st.image(LOGO_PATH, width=130)
+    else:
+        st.markdown("## 🌱 **Yby Tech**")
 
-df = carregar_dados()
-
-# --- Aviso de leituras descartadas (transparencia) ---
-conn_check = sqlite3.connect(DB_PATH)
-total_bruto = conn_check.execute("SELECT COUNT(*) FROM leitura").fetchone()[0]
-conn_check.close()
-descartadas = total_bruto - len(df)
-if descartadas > 0:
-    st.sidebar.warning(f"⚠️ {descartadas} leituras fora da faixa plausível (0-100% / -40 a 80°C) foram descartadas automaticamente do gráfico.")
-
-if df.empty:
-    st.warning("Nenhuma leitura encontrada no banco de dados. Confirme se o coletor (salvar_dados.py) já rodou.")
-    st.stop()
-
-# --- Filtro: exclui leituras de teste, se a coluna existir ---
-if "teste" in df.columns:
-    somente_reais = st.sidebar.checkbox("Excluir leituras de teste", value=True)
-    if somente_reais:
-        df = df[df["teste"] == 0]
-
-if df.empty:
-    st.warning("Nenhuma leitura real encontrada (todas foram marcadas como teste).")
-    st.stop()
-
-# --- Filtro de período ---
-st.sidebar.header("Filtros")
-data_min = df["data"].min().to_pydatetime()
-data_max = df["data"].max().to_pydatetime()
-
-if data_min == data_max:
-    intervalo = (data_min, data_max)
-    st.sidebar.info("Apenas uma leitura disponível até o momento.")
-else:
-    intervalo = st.sidebar.slider(
-        "Período",
-        min_value=data_min,
-        max_value=data_max,
-        value=(data_min, data_max),
-        format="DD/MM/YY HH:mm",
-    )
-
-df_filtrado = df[(df["data"] >= intervalo[0]) & (df["data"] <= intervalo[1])]
-
-# --- Metricas do topo ---
-ultima = df.iloc[-1]
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("🌡️ Temperatura atual", f"{ultima['temperatura']:.1f} °C")
-col2.metric("💧 Umidade atual", f"{ultima['humidade']:.1f} %")
-col3.metric("🕒 Última leitura", ultima["data"].strftime("%d/%m %H:%M:%S"))
-col4.metric("📊 Leituras no período", f"{len(df_filtrado)}")
+with col_titulo:
+    st.title("Yby Tech — Soluções de Automação & Confiabilidade IoT")
+    st.caption("Estação Meteorológica V2 | Monitoramento em Tempo Real & Análise de SLAs de Processo")
 
 st.divider()
 
-# --- Grafico de serie temporal (eixo duplo) ---
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=df_filtrado["data"], y=df_filtrado["temperatura"],
-    name="Temperatura (°C)", line=dict(color="#e74c3c"), yaxis="y1"
-))
-fig.add_trace(go.Scatter(
-    x=df_filtrado["data"], y=df_filtrado["humidade"],
-    name="Umidade (%)", line=dict(color="#3498db"), yaxis="y2"
-))
+# --- Botão de Atualização Manual ---
+col_btn, _ = st.columns([1, 5])
+with col_btn:
+    if st.button("🔄 Atualizar Dados"):
+        st.cache_data.clear()
 
-fig.update_layout(
-    title="Temperatura e Umidade ao Longo do Tempo",
-    xaxis=dict(title="Data/Hora"),
-    yaxis=dict(title="Temperatura (°C)", side="left", color="#e74c3c"),
-    yaxis2=dict(title="Umidade (%)", side="right", overlaying="y", color="#3498db"),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    hovermode="x unified",
-    height=450,
-)
-st.plotly_chart(fig, use_container_width=True)
+df = carregar_dados_coleta()
 
-# --- Estatisticas do periodo ---
-st.subheader("Estatísticas do período selecionado")
-col1, col2 = st.columns(2)
-with col1:
-    st.write("**Temperatura (°C)**")
-    st.dataframe(df_filtrado["temperatura"].describe().to_frame(name="valor"), use_container_width=True)
-with col2:
-    st.write("**Umidade (%)**")
-    st.dataframe(df_filtrado["humidade"].describe().to_frame(name="valor"), use_container_width=True)
+if df.empty or "timestamp" not in df.columns:
+    st.warning("⚠️ Nenhuma leitura encontrada no banco de dados (`estacao_climatica.db`). Verifique se a coleta está ativa.")
+    st.stop()
 
-# --- Media por dia ---
-st.subheader("Médias diárias")
-df_diario = (
-    df_filtrado.assign(dia=df_filtrado["data"].dt.date)
-    .groupby("dia")[["temperatura", "humidade"]]
-    .mean()
-    .round(1)
-    .reset_index()
-)
-st.bar_chart(df_diario.set_index("dia"))
+# --- Sidebar (Menu Lateral) ---
+with st.sidebar:
+    if LOGO_PATH:
+        st.image(LOGO_PATH)
+    st.markdown("<h2 style='text-align: center;'>Yby Tech</h2>", unsafe_allow_html=True)
+    st.caption("<p style='text-align: center;'>Engenharia de Automação & Dados</p>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.header("⚙️ Filtros Operacionais")
+    
+    # Remoção de NaT caso exista algum timestamp corrompido
+    df_valido_tempo = df.dropna(subset=["timestamp"])
+    
+    if df_valido_tempo.empty:
+        st.error("Não foi possível processar os registros de data/hora do banco.")
+        st.stop()
 
-# --- Tabela de dados brutos ---
-with st.expander("Ver dados brutos"):
-    st.dataframe(
-        df_filtrado.sort_values("data", ascending=False),
-        use_container_width=True,
-        hide_index=True,
-    )
+    data_min = df_valido_tempo["timestamp"].min().to_pydatetime()
+    data_max = df_valido_tempo["timestamp"].max().to_pydatetime()
 
-st.caption(f"Fonte: `{DB_PATH}` — {len(df)} leituras totais no banco. Cache atualiza a cada 5s.")
+    if data_min == data_max:
+        intervalo = (data_min, data_max)
+        st.info("Apenas 1 ciclo de amostragem registrado.")
+    else:
+        intervalo = st.slider(
+            "Período de Análise",
+            min_value=data_min,
+            max_value=data_max,
+            value=(data_min, data_max),
+            format="DD/MM/YY HH:mm",
+        )
+
+# Filtragem por período selecionado
+df_filtrado = df[(df["timestamp"] >= intervalo[0]) & (df["timestamp"] <= intervalo[1])].copy()
+
+# Leituras físicas válidas para análise do processo
+df_validos = df_filtrado[
+    (df_filtrado["status"] == "OK") & 
+    (df_filtrado["umidade"].between(0, 100)) & 
+    (df_filtrado["temperatura"].between(-40, 80))
+]
+
+# --- Abas do Dashboard ---
+aba_processo, aba_confiabilidade = st.tabs(["📊 Monitoramento do Processo", "⚙️ Confiabilidade do Gateway (SLA)"])
+
+# ==========================================
+# ABA 1: MONITORAMENTO DO PROCESSO
+# ==========================================
+with aba_processo:
+    if not df_validos.empty:
+        ultima = df_validos.iloc[-1]
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("🌡️ Temperatura Atual", f"{ultima['temperatura']:.1f} °C")
+        col2.metric("💧 Umidade Atual", f"{ultima['umidade']:.1f} %")
+        col3.metric("🕒 Último Ciclo Válido", ultima["timestamp"].strftime("%H:%M:%S"))
+        col4.metric("📊 Total de Amostras Válidas", f"{len(df_validos)}")
+
+        st.divider()
+
+        # Gráfico Temporal de Variáveis Ambientais
+        fig_processo = go.Figure()
+        fig_processo.add_trace(go.Scatter(
+            x=df_validos["timestamp"], y=df_validos["temperatura"],
+            name="Temperatura (°C)", line=dict(color="#2ecc71", width=2), yaxis="y1"
+        ))
+        fig_processo.add_trace(go.Scatter(
+            x=df_validos["timestamp"], y=df_validos["umidade"],
+            name="Umidade (%)", line=dict(color="#3498db", width=2), yaxis="y2"
+        ))
+
+        fig_processo.update_layout(
+            title="Série Temporal de Variáveis Ambientais",
+            xaxis=dict(title="Data/Hora"),
+            yaxis=dict(title="Temperatura (°C)", side="left", color="#2ecc71"),
+            yaxis2=dict(title="Umidade (%)", side="right", overlaying="y", color="#3498db"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            hovermode="x unified",
+            height=400,
+        )
+        st.plotly_chart(fig_processo)
+
+        col_est1, col_est2 = st.columns(2)
+        with col_est1:
+            st.subheader("Estatísticas de Temperatura (°C)")
+            st.dataframe(df_validos["temperatura"].describe().to_frame(name="Métrica"))
+        with col_est2:
+            st.subheader("Estatísticas de Umidade (%)")
+            st.dataframe(df_validos["umidade"].describe().to_frame(name="Métrica"))
+
+    else:
+        st.warning("Nenhum dado ambiental válido encontrado no período selecionado.")
+
+# ==========================================
+# ABA 2: CONFIABILIDADE & INFRAESTRUTURA
+# ==========================================
+with aba_confiabilidade:
+    total_ciclos = len(df_filtrado)
+    ciclos_sucesso = len(df_filtrado[df_filtrado["status"] == "OK"])
+    taxa_disponibilidade = (ciclos_sucesso / total_ciclos * 100) if total_ciclos > 0 else 0.0
+    latencia_media = df_filtrado["duracao_execucao_ms"].mean() if total_ciclos > 0 else 0.0
+
+    col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+    col_kpi1.metric("🎯 Disponibilidade do Gateway", f"{taxa_disponibilidade:.2f} %")
+    col_kpi2.metric("⚡ Latência Média de Coleta", f"{latencia_media:.1f} ms")
+    col_kpi3.metric("🔄 Total de Requisições", f"{total_ciclos}")
+    col_kpi4.metric("❌ Falhas Gravadas", f"{total_ciclos - ciclos_sucesso}")
+
+    st.divider()
+
+    col_graf1, col_graf2 = st.columns(2)
+
+    with col_graf1:
+        st.subheader("⚡ Desempenho de Latência da Rede (ms)")
+        fig_latencia = px.line(
+            df_filtrado, 
+            x="timestamp", 
+            y="duracao_execucao_ms",
+            title="Tempo de Resposta HTTP/JSON (ESP8266 → Gateway)",
+            labels={"duracao_execucao_ms": "Latência (ms)", "timestamp": "Data/Hora"},
+            color_discrete_sequence=["#f39c12"]
+        )
+        fig_latencia.update_layout(height=350)
+        st.plotly_chart(fig_latencia)
+
+    with col_graf2:
+        st.subheader("🎯 Ocorrência de Status Operacionais")
+        status_counts = df_filtrado["status"].value_counts().reset_index()
+        status_counts.columns = ["Status", "Quantidade"]
+        fig_status = px.pie(
+            status_counts, 
+            names="Status", 
+            values="Quantidade",
+            title="Distribuição das Respostas do Gateway",
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Set2
+        )
+        fig_status.update_layout(height=350)
+        st.plotly_chart(fig_status)
+
+    with st.expander("🔍 Inspecionar Eventos e Erros Registrados"):
+        cols_exibir = [c for c in ["id", "timestamp", "status", "http_code", "duracao_execucao_ms", "erro", "temperatura", "umidade"] if c in df_filtrado.columns]
+        st.dataframe(
+            df_filtrado.sort_values("timestamp", ascending=False)[cols_exibir],
+            hide_index=True,
+        )
+
+st.caption(f"© Yby Tech — Soluções Industriais | Banco de Dados: `{DB_PATH}`")

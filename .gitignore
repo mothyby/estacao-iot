@@ -12,4 +12,12 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+*.db-journal
 logs/
+#Arduino build artifacts
+build/
+*.hex
+
+# Sistema 
+
+.DS_Store
