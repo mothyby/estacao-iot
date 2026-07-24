@@ -201,8 +201,6 @@ Acesse no seu navegador: `http://localhost:8501`
 
 **Cleber Gonçalves de Jesus**
 
-*Analista de Engenharia de Automação & Dados Industriais Senior*
-
 *Graduando em Engenharia de Controle e Automação*
 
 *Graduando em Gestão da Produção Industrial*
